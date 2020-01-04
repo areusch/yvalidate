@@ -89,9 +89,20 @@ func UnmarshalStrict(in []byte, out interface{}) (err error) {
 	return unmarshal(in, out, true)
 }
 
+// Describes line and column information for each value set on a decoded struct.
+type SourceMap struct {
+	GoName string
+	YamlName string
+	Line int
+	Column int
+}
+
+type SourceMapReceiver func(SourceMap)
+
 // A Decoder reads and decodes YAML values from an input stream.
 type Decoder struct {
 	strict bool
+	sourceMapReceiver SourceMapReceiver
 	parser *parser
 }
 
@@ -103,6 +114,10 @@ func NewDecoder(r io.Reader) *Decoder {
 	return &Decoder{
 		parser: newParserFromReader(r),
 	}
+}
+
+func (dec *Decoder) SetSourceMapReceiver(fir SourceMapReceiver) {
+	dec.sourceMapReceiver = fir
 }
 
 // SetStrict sets whether strict decoding behaviour is enabled when
@@ -117,7 +132,7 @@ func (dec *Decoder) SetStrict(strict bool) {
 // See the documentation for Unmarshal for details about the
 // conversion of YAML into a Go value.
 func (dec *Decoder) Decode(v interface{}) (err error) {
-	d := newDecoder(dec.strict)
+	d := newDecoder(dec.strict, dec.sourceMapReceiver)
 	defer handleErr(&err)
 	node := dec.parser.parse()
 	if node == nil {
@@ -136,7 +151,7 @@ func (dec *Decoder) Decode(v interface{}) (err error) {
 
 func unmarshal(in []byte, out interface{}, strict bool) (err error) {
 	defer handleErr(&err)
-	d := newDecoder(strict)
+	d := newDecoder(strict, nil)
 	p := newParser(in)
 	defer p.destroy()
 	node := p.parse()

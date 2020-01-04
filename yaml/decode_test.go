@@ -9,10 +9,12 @@ import (
 	"time"
 
 	. "gopkg.in/check.v1"
-	"gopkg.in/yaml.v2"
+	"github.com/areusch/yaml-translator/yaml"
 )
 
 var unmarshalIntTest = 123
+
+type SMap = yaml.SourceMap
 
 var unmarshalTests = []struct {
 	data  string
@@ -760,6 +762,50 @@ func (s *S) TestUnmarshal(c *C) {
 	}
 }
 
+
+type Nested struct {
+	Abc int `yaml:"abc"`
+	Def int `yaml:"def"`
+}
+
+var sourceMapTests = []struct {
+	data  string
+	value interface{}
+	source []SMap
+}{
+	{"v: hi", map[string]interface{}{"v": "hi"}, []SMap{SMap{"v", "v", 1, 3}}},
+	{"V: hi", struct{ V string }{V: "hi"}, []SMap{SMap{"V", "V", 1, 3}}},
+	{"v: hi", struct{ V string `yaml:"v"` }{V: "hi"}, []SMap{SMap{"v", "v", 1, 3}}},
+	{"123", 123, []SMap{}},
+	{
+		"v:\n    abc: 123\n    def: 456\nu: 1\n",
+		struct{ V Nested `yaml:"v"`; U int `yaml:"u"` }{Nested{123, 456}, 1},
+		[]SMap{SMap{"V", "v", 1, 1}, SMap{"V.Abc", "v.abc", 2, 9}, SMap{"V.Def", "v.def", 3, 9}, SMap{"U", "u", 4, 3}},
+	},
+}
+
+
+func (s *S) TestSourceMapReceiver(c *C) {
+	for i, item := range sourceMapTests {
+		c.Logf("test %d: %q", i, item.data)
+		t := reflect.ValueOf(item.value).Type()
+		value := reflect.New(t)
+		dec := yaml.NewDecoder(strings.NewReader(item.data))
+
+  	fi := make([]SMap, 0, 10)
+		fir := func(f SMap) {
+			c.Logf("SM: %s %s: %v", f.GoName, f.YamlName, fi)
+			fi = append(fi, f)
+	  }
+
+		dec.SetSourceMapReceiver(fir)
+		err := dec.Decode(value.Interface())
+		c.Assert(err, IsNil)
+		c.Assert(value.Elem().Interface(), DeepEquals, item.value, Commentf("error: %v", err))
+		c.Assert(fi, DeepEquals, item.source)
+	}
+}
+
 // TODO(v3): This test should also work when unmarshaling onto an interface{}.
 func (s *S) TestUnmarshalFullTimestamp(c *C) {
 	// Full timestamp in same format as encoded. This is confirmed to be
@@ -1138,7 +1184,7 @@ longTag:
   label: center/big
 
 inlineMap:
-  # Inlined map 
+  # Inlined map
   << : {"x": 1, "y": 2, "r": 10}
   label: center/big
 

@@ -223,12 +223,47 @@ func (p *parser) mapping() *node {
 // ----------------------------------------------------------------------------
 // Decoder, unmarshals a node into a provided value.
 
+type pathBuilder struct {
+	p []byte
+	tokens []int
+	tokenN uint16
+}
+
+func (s *pathBuilder) push(part string) int {
+	s.tokens = append(s.tokens, int(s.tokenN) << 16 | len(s.p))
+	s.p = append(s.p, part...)
+	s.tokenN++
+	return s.tokens[len(s.tokens) - 1]
+}
+
+func (s *pathBuilder) pop(token int) {
+	if len(s.tokens) == 0 {
+		panic("pop before push")
+	}
+
+	want := s.tokens[len(s.tokens) - 1]
+	if token != want {
+		panic(fmt.Sprintf("pop: expected token %08x, got %08x", want, token))
+	}
+
+	s.p = s.p[:want & 0xffff]
+	s.tokens = s.tokens[:len(s.tokens) - 1]
+}
+
+func (s pathBuilder) value() string {
+	return string(s.p)
+}
+
+
 type decoder struct {
 	doc     *node
 	aliases map[*node]bool
 	mapType reflect.Type
 	terrors []string
 	strict  bool
+	sourceMapReceiver SourceMapReceiver
+	goPath pathBuilder
+	yamlPath pathBuilder
 
 	decodeCount int
 	aliasCount  int
@@ -244,8 +279,8 @@ var (
 	ptrTimeType    = reflect.TypeOf(&time.Time{})
 )
 
-func newDecoder(strict bool) *decoder {
-	d := &decoder{mapType: defaultMapType, strict: strict}
+func newDecoder(strict bool, sourceMapReceiver SourceMapReceiver) *decoder {
+	d := &decoder{mapType: defaultMapType, strict: strict, sourceMapReceiver: sourceMapReceiver}
 	d.aliases = make(map[*node]bool)
 	return d
 }
@@ -575,6 +610,19 @@ func (d *decoder) scalar(n *node, out reflect.Value) bool {
 	return false
 }
 
+func (d decoder) exportSourceMap(n *node) {
+	name := d.goPath.value()
+	if len(name) > 0 && name[0] == '.' {
+		name = name[1:]
+	}
+	yamlName := d.yamlPath.value()
+	if len(yamlName) > 0 && yamlName[0] == '.' {
+		yamlName = yamlName[1:]
+	}
+	fi := SourceMap{GoName: name, YamlName: yamlName, Line: n.line + 1, Column: n.column}
+	d.sourceMapReceiver(fi)
+}
+
 func settableValueOf(i interface{}) reflect.Value {
 	v := reflect.ValueOf(i)
 	sv := reflect.New(v.Type()).Elem()
@@ -607,6 +655,16 @@ func (d *decoder) sequence(n *node, out reflect.Value) (good bool) {
 	for i := 0; i < l; i++ {
 		e := reflect.New(et).Elem()
 		if ok := d.unmarshal(n.children[i], e); ok {
+			if d.sourceMapReceiver != nil {
+				var goToken, yamlToken int
+				{
+					part := fmt.Sprintf("[%d]", i)
+					goToken, yamlToken = d.goPath.push(part), d.yamlPath.push(part)
+				}
+				d.exportSourceMap(n.children[i])
+				d.goPath.pop(goToken)
+				d.yamlPath.pop(yamlToken)
+			}
 			out.Index(j).Set(e)
 			j++
 		}
@@ -620,6 +678,7 @@ func (d *decoder) sequence(n *node, out reflect.Value) (good bool) {
 	return true
 }
 
+// TODO
 func (d *decoder) mapping(n *node, out reflect.Value) (good bool) {
 	switch out.Kind() {
 	case reflect.Struct:
@@ -673,8 +732,19 @@ func (d *decoder) mapping(n *node, out reflect.Value) (good bool) {
 				failf("invalid map key: %#v", k.Interface())
 			}
 			e := reflect.New(et).Elem()
+			var goToken, yamlToken int
+			if d.sourceMapReceiver != nil {
+				sourceMapKey := fmt.Sprintf("[%v]", k)
+				goToken = d.goPath.push(sourceMapKey)
+				yamlToken = d.yamlPath.push(sourceMapKey)
+			}
 			if d.unmarshal(n.children[i+1], e) {
 				d.setMapIndex(n.children[i+1], out, k, e)
+			}
+			if d.sourceMapReceiver != nil {
+				d.exportSourceMap(n.children[i+1])
+				d.goPath.pop(goToken)
+				d.yamlPath.pop(yamlToken)
 			}
 		}
 	}
@@ -764,14 +834,34 @@ func (d *decoder) mappingStruct(n *node, out reflect.Value) (good bool) {
 			} else {
 				field = out.FieldByIndex(info.Inline)
 			}
+			var goToken, yamlToken int
+			if d.sourceMapReceiver != nil {
+				goToken = d.goPath.push(fmt.Sprintf(".%s", out.Type().Field(info.Num).Name))
+				yamlToken = d.yamlPath.push(fmt.Sprintf(".%s", name.String()))
+			}
 			d.unmarshal(n.children[i+1], field)
+			if d.sourceMapReceiver != nil {
+				d.exportSourceMap(n.children[i + 1])
+				d.goPath.pop(goToken)
+				d.yamlPath.pop(yamlToken)
+			}
 		} else if sinfo.InlineMap != -1 {
 			if inlineMap.IsNil() {
 				inlineMap.Set(reflect.MakeMap(inlineMap.Type()))
 			}
 			value := reflect.New(elemType).Elem()
+			var goToken, yamlToken int
+			if d.sourceMapReceiver != nil {
+				goToken = d.goPath.push(fmt.Sprintf(".%s", out.Type().Field(info.Num).Name))
+				yamlToken = d.yamlPath.push(fmt.Sprintf(".%s", name.String()))
+			}
 			d.unmarshal(n.children[i+1], value)
 			d.setMapIndex(n.children[i+1], inlineMap, name, value)
+			if d.sourceMapReceiver != nil {
+				d.exportSourceMap(n.children[i + 1])
+				d.goPath.pop(goToken)
+				d.yamlPath.pop(yamlToken)
+			}
 		} else if d.strict {
 			d.terrors = append(d.terrors, fmt.Sprintf("line %d: field %s not found in type %s", ni.line+1, name.String(), out.Type()))
 		}
