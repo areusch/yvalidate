@@ -613,3 +613,17 @@ func (v *Validate) VarWithValueCtx(ctx context.Context, field interface{}, other
 	v.pool.Put(vd)
 	return
 }
+
+func (v *Validate) TranslateError(ut ut.Translator, fe FieldError) (string, bool) {
+	m, ok := v.transTagFunc[ut]
+	if !ok {
+		return "", false
+	}
+
+	fn, ok := m[fe.Tag()]
+	if !ok {
+		return "", false
+	}
+
+	return fn(ut, fe), true
+}

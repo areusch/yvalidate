@@ -257,16 +257,9 @@ func (fe *fieldError) Error() string {
 // NOTE: is not registered translation can be found it returns the same
 // as calling fe.Error()
 func (fe *fieldError) Translate(ut ut.Translator) string {
-
-	m, ok := fe.v.transTagFunc[ut]
-	if !ok {
-		return fe.Error()
+	if x, ok := fe.v.TranslateError(ut, fe); ok {
+		return x
 	}
 
-	fn, ok := m[fe.tag]
-	if !ok {
-		return fe.Error()
-	}
-
-	return fn(ut, fe)
+	return fe.Error()
 }
