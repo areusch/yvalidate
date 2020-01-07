@@ -27,11 +27,11 @@ Installation
 
 Use go get.
 
-	go get github.com/areusch/yaml-translator/validator
+	go get github.com/areusch/yvalidate/validator
 
 Then import the validator package into your own code.
 
-	import "github.com/areusch/yaml-translator/validator"
+	import "github.com/areusch/yvalidate/validator"
 
 Error Return Value
 -------

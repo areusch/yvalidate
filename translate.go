@@ -1,10 +1,10 @@
-package yaml_translator
+package yvalidate
 
 import (
 	"fmt"
-	"github.com/areusch/yaml-translator/validator"
-	"github.com/areusch/yaml-translator/validator/translations/en"
-	"github.com/areusch/yaml-translator/yaml" // Forked copy of go-yaml
+	"github.com/areusch/yvalidate/validator"
+	"github.com/areusch/yvalidate/validator/translations/en"
+	"github.com/areusch/yvalidate/yaml" // Forked copy of go-yaml
 	"github.com/go-playground/locales/en_US"
 	ut "github.com/go-playground/universal-translator"
 	"io"

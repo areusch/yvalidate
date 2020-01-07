@@ -9,7 +9,7 @@ import (
 	"time"
 
 	. "gopkg.in/check.v1"
-	"github.com/areusch/yaml-translator/yaml"
+	"github.com/areusch/yvalidate/yaml"
 )
 
 var unmarshalIntTest = 123

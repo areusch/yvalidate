@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/areusch/yaml-translator/validator"
+	"github.com/areusch/yvalidate/validator"
 )
 
 // MyStruct ..

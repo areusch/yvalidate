@@ -7,7 +7,7 @@ import (
 	turkish "github.com/go-playground/locales/tr"
 	ut "github.com/go-playground/universal-translator"
 	. "github.com/go-playground/assert/v2"
-	"github.com/areusch/yaml-translator/validator"
+	"github.com/areusch/yvalidate/validator"
 )
 
 func TestTranslations(t *testing.T) {

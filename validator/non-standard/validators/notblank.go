@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/areusch/yaml-translator/validator"
+	"github.com/areusch/yvalidate/validator"
 )
 
 // NotBlank is the validation function for validating if the current field

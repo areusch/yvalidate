@@ -5,8 +5,8 @@ import (
 
 	"github.com/go-playground/locales/en"
 	ut "github.com/go-playground/universal-translator"
-	"github.com/areusch/yaml-translator/validator"
-	en_translations "github.com/areusch/yaml-translator/validator/translations/en"
+	"github.com/areusch/yvalidate/validator"
+	en_translations "github.com/areusch/yvalidate/validator/translations/en"
 )
 
 // User contains user information

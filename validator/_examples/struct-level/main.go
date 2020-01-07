@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/areusch/yaml-translator/validator"
+	"github.com/areusch/yvalidate/validator"
 )
 
 // User contains user information

@@ -1,4 +1,4 @@
-module github.com/areusch/yaml-translator
+module github.com/areusch/yvalidate
 
 go 1.13
 

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/areusch/yaml-translator/validator"
+	"github.com/areusch/yvalidate/validator"
 )
 
 // DbBackedUser User struct

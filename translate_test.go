@@ -1,4 +1,4 @@
-package yaml_translator
+package yvalidate
 
 import (
 	"github.com/lithammer/dedent"

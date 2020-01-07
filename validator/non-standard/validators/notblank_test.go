@@ -3,7 +3,7 @@ package validators
 import (
 	"testing"
 
-	"github.com/areusch/yaml-translator/validator"
+	"github.com/areusch/yvalidate/validator"
 	"github.com/go-playground/assert/v2"
 )
 
