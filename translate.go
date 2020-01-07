@@ -43,7 +43,8 @@ func (e MappedFieldError) Error() string {
 }
 
 type SourceMapper struct {
-	smap map[string]yaml.SourceMap
+	Prefix string
+	smap   map[string]yaml.SourceMap
 }
 
 func (t *SourceMapper) AddSourceMap(smap yaml.SourceMap) {
@@ -54,6 +55,9 @@ func (t *SourceMapper) AddSourceMap(smap yaml.SourceMap) {
 }
 
 func (t *SourceMapper) Translate(f string, fileName string) string {
+	if strings.HasPrefix(f, t.Prefix) {
+		f = f[len(t.Prefix):]
+	}
 	if xf, ok := t.smap[f]; ok {
 		return fmt.Sprintf("%s (%s:%d:%d)", xf.YamlName, fileName, xf.Line, xf.Column)
 	}
@@ -150,27 +154,10 @@ func translateErrors(ve validator.ValidationErrors, v *validator.Validate, t ut.
 	return
 }
 
-func DecodeVar(r io.Reader, fileName string, m interface{}, tag string) error {
-	rv := reflect.ValueOf(m)
-	if rv.Kind() != reflect.Map {
-		return fmt.Errorf("DecodeMap: want map, got %s", rv.Kind())
-	}
-
-	t, sm, v, err := decodeInternal(r, fileName, m)
-	if err != nil {
-		return err
-	}
-
-	err = v.Var(m, tag)
-	if err != nil {
-		if ve, ok := err.(validator.ValidationErrors); ok {
-			return translateErrors(ve, v, t, fileName, sm)
-		}
-	}
-
-	return err
-}
-
+// Parse one yaml document from 'i' into the struct pointed to by 'i', then
+// checks the parsed struct against any `validate` tags present. Any validation
+// errors returned cite the invalid field's location by 1-based line and column
+// number. Those locations are referenced to `fileName`.
 func DecodeStruct(r io.Reader, fileName string, i interface{}) error {
 	rv := reflect.ValueOf(i)
 	k := rv.Kind()
@@ -186,7 +173,38 @@ func DecodeStruct(r io.Reader, fileName string, i interface{}) error {
 	if err != nil {
 		return err
 	}
+
+	ti := rv.Type()
+	if ti.Name() != "" {
+		sm.Prefix = ti.Name() + "."
+	}
+
 	err = v.Struct(i)
+	if err != nil {
+		if ve, ok := err.(validator.ValidationErrors); ok {
+			return translateErrors(ve, v, t, fileName, sm)
+		}
+	}
+
+	return err
+}
+
+// Decode one yaml literal from `r` into the pointer `m`. Then, validation is
+// performed according to `tag` (as if it were a tag on the field containing
+// `m`). Any validation errors returned cite the invalid field's location by
+// 1-based line and column number. Those locations are referenced to `fileName`.
+func DecodeVar(r io.Reader, fileName string, m interface{}, tag string) error {
+	rv := reflect.ValueOf(m)
+	if rv.Kind() != reflect.Map {
+		return fmt.Errorf("DecodeMap: want map, got %s", rv.Kind())
+	}
+
+	t, sm, v, err := decodeInternal(r, fileName, m)
+	if err != nil {
+		return err
+	}
+
+	err = v.Var(m, tag)
 	if err != nil {
 		if ve, ok := err.(validator.ValidationErrors); ok {
 			return translateErrors(ve, v, t, fileName, sm)
