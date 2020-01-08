@@ -762,28 +762,31 @@ func (s *S) TestUnmarshal(c *C) {
 	}
 }
 
-
 type Nested struct {
 	Abc int `yaml:"abc"`
 	Def int `yaml:"def"`
 }
 
 var sourceMapTests = []struct {
-	data  string
-	value interface{}
+	data   string
+	value  interface{}
 	source []SMap
 }{
-	{"v: hi", map[string]interface{}{"v": "hi"}, []SMap{SMap{"v", "v", 1, 3}}},
-	{"V: hi", struct{ V string }{V: "hi"}, []SMap{SMap{"V", "V", 1, 3}}},
-	{"v: hi", struct{ V string `yaml:"v"` }{V: "hi"}, []SMap{SMap{"v", "v", 1, 3}}},
+	{"v: hi", map[string]interface{}{"v": "hi"}, []SMap{SMap{"[v]", "[v]", 1, 3}}},
+	{"v: hi", struct{ V string }{V: "hi"}, []SMap{SMap{"V", "v", 1, 3}}},
+	{"v: hi", struct {
+		V string `yaml:"v"`
+	}{V: "hi"}, []SMap{SMap{"V", "v", 1, 3}}},
 	{"123", 123, []SMap{}},
 	{
 		"v:\n    abc: 123\n    def: 456\nu: 1\n",
-		struct{ V Nested `yaml:"v"`; U int `yaml:"u"` }{Nested{123, 456}, 1},
-		[]SMap{SMap{"V", "v", 1, 1}, SMap{"V.Abc", "v.abc", 2, 9}, SMap{"V.Def", "v.def", 3, 9}, SMap{"U", "u", 4, 3}},
+		struct {
+			V Nested `yaml:"v"`
+			U int    `yaml:"u"`
+		}{Nested{123, 456}, 1},
+		[]SMap{SMap{"V.Abc", "v.abc", 2, 9}, SMap{"V.Def", "v.def", 3, 9}, SMap{"V", "v", 2, 4}, SMap{"U", "u", 4, 3}},
 	},
 }
-
 
 func (s *S) TestSourceMapReceiver(c *C) {
 	for i, item := range sourceMapTests {
@@ -792,11 +795,11 @@ func (s *S) TestSourceMapReceiver(c *C) {
 		value := reflect.New(t)
 		dec := yaml.NewDecoder(strings.NewReader(item.data))
 
-  	fi := make([]SMap, 0, 10)
+		fi := make([]SMap, 0, 10)
 		fir := func(f SMap) {
 			c.Logf("SM: %s %s: %v", f.GoName, f.YamlName, fi)
 			fi = append(fi, f)
-	  }
+		}
 
 		dec.SetSourceMapReceiver(fir)
 		err := dec.Decode(value.Interface())
