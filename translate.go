@@ -12,25 +12,25 @@ import (
 	"strings"
 )
 
-type MappedFieldError struct {
+type mappedFieldError struct {
 	validator.FieldError
 	fileName string
-	sm       *SourceMapper
+	sm       *sourceMapper
 }
 
-func (e MappedFieldError) Field() string {
+func (e mappedFieldError) Field() string {
 	return e.Namespace()
 }
 
-func (e MappedFieldError) StructField() string {
+func (e mappedFieldError) StructField() string {
 	return e.StructNamespace()
 }
 
-func (e MappedFieldError) Namespace() string {
+func (e mappedFieldError) Namespace() string {
 	return e.sm.Translate(e.FieldError.Namespace(), e.fileName)
 }
 
-func (e MappedFieldError) StructNamespace() string {
+func (e mappedFieldError) StructNamespace() string {
 	return e.sm.Translate(e.FieldError.StructNamespace(), e.fileName)
 }
 
@@ -38,23 +38,23 @@ const (
 	fieldErrMsg = "Field %s: validation failed on the '%s' tag"
 )
 
-func (e MappedFieldError) Error() string {
+func (e mappedFieldError) Error() string {
 	return fmt.Sprintf(fieldErrMsg, e.Namespace(), e.Tag())
 }
 
-type SourceMapper struct {
+type sourceMapper struct {
 	Prefix string
 	smap   map[string]yaml.SourceMap
 }
 
-func (t *SourceMapper) AddSourceMap(smap yaml.SourceMap) {
+func (t *sourceMapper) AddSourceMap(smap yaml.SourceMap) {
 	if t.smap == nil {
 		t.smap = make(map[string]yaml.SourceMap)
 	}
 	t.smap[smap.GoName] = smap
 }
 
-func (t *SourceMapper) Translate(f string, fileName string) string {
+func (t *sourceMapper) Translate(f string, fileName string) string {
 	if strings.HasPrefix(f, t.Prefix) {
 		f = f[len(t.Prefix):]
 	}
@@ -102,7 +102,7 @@ func registrationFunc(tag string, translation string, override bool) validator.R
 	}
 }
 
-func decodeInternal(r io.Reader, fileName string, i interface{}) (t ut.Translator, sm SourceMapper, v *validator.Validate, err error) {
+func decodeInternal(r io.Reader, fileName string, i interface{}) (t ut.Translator, sm sourceMapper, v *validator.Validate, err error) {
 	dec := yaml.NewDecoder(r)
 	dec.SetSourceMapReceiver(sm.AddSourceMap)
 	err = dec.Decode(i)
@@ -141,9 +141,9 @@ func decodeInternal(r io.Reader, fileName string, i interface{}) (t ut.Translato
 	return
 }
 
-func translateErrors(ve validator.ValidationErrors, v *validator.Validate, t ut.Translator, fileName string, sm SourceMapper) (te TranslatedErrors) {
+func translateErrors(ve validator.ValidationErrors, v *validator.Validate, t ut.Translator, fileName string, sm sourceMapper) (te TranslatedErrors) {
 	for _, x := range ve {
-		mfe := MappedFieldError{x, fileName, &sm}
+		mfe := mappedFieldError{x, fileName, &sm}
 		if translated, success := v.TranslateError(t, mfe); success {
 			te = append(te, translated)
 		} else {
