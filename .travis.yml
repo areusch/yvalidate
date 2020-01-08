@@ -1,0 +1,13 @@
+language: go
+go:
+  - 1.13.x
+  - master
+
+notifications:
+  email:
+    recipients: areusch@gmail.com
+    on_success: change
+    on_failure: always
+
+git:
+  depth: 1
