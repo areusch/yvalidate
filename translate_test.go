@@ -59,6 +59,16 @@ var tests []TestDescription = []TestDescription{
     `,
 		[]string{"emb.foo (<input>:3:9) is not equal to Baz", "bar (<input>:4:5) must be equal to emb.foo (<input>:3:9)"},
 	},
+	{
+		struct {
+			Bar struct {
+				VersionString string `yaml:"version_string" validate:"required"`
+			}  `yaml:"bar,omitempty"`
+			Foo int32
+		}{},
+		`foo: 1`,
+		[]string{"bar.version_string is a required field"},
+	},
 }
 
 func (s *InvalidSuite) TestInvalidStruct(c *C) {
@@ -74,6 +84,17 @@ func (s *InvalidSuite) TestInvalidStruct(c *C) {
 			c.Assert(err, Equals, nil)
 		}
 	}
+}
+
+func (s *InvalidSuite) TestInvalidField(c *C) {
+	v := struct {
+		Foo int32  `yaml:"foo"`
+	}{}
+
+	err := DecodeStruct(strings.NewReader(`bar: 2`), "file name", &v)
+	c.Assert(err.Error(), Equals,
+		"yaml: unmarshal errors:\n" +
+		`  line 1: field bar not found in type struct { Foo int32 "yaml:\"foo\"" }`)
 }
 
 func (s *InvalidSuite) TestMap(c *C) {

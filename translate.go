@@ -16,6 +16,7 @@ type mappedFieldError struct {
 	validator.FieldError
 	fileName string
 	sm       *sourceMapper
+	t reflect.Type
 }
 
 func (e mappedFieldError) Field() string {
@@ -27,11 +28,11 @@ func (e mappedFieldError) StructField() string {
 }
 
 func (e mappedFieldError) Namespace() string {
-	return e.sm.Translate(e.FieldError.Namespace(), e.fileName)
+	return e.sm.Translate(e.t, e.FieldError.Namespace(), e.fileName)
 }
 
 func (e mappedFieldError) StructNamespace() string {
-	return e.sm.Translate(e.FieldError.StructNamespace(), e.fileName)
+	return e.sm.Translate(e.t, e.FieldError.StructNamespace(), e.fileName)
 }
 
 const (
@@ -54,7 +55,7 @@ func (t *sourceMapper) AddSourceMap(smap yaml.SourceMap) {
 	t.smap[smap.GoName] = smap
 }
 
-func (t *sourceMapper) Translate(f string, fileName string) string {
+func (t *sourceMapper) Translate(target reflect.Type, f string, fileName string) string {
 	if strings.HasPrefix(f, t.Prefix) {
 		f = f[len(t.Prefix):]
 	}
@@ -62,7 +63,43 @@ func (t *sourceMapper) Translate(f string, fileName string) string {
 		return fmt.Sprintf("%s (%s:%d:%d)", xf.YamlName, fileName, xf.Line, xf.Column)
 	}
 
-	return f
+	if target == nil {
+		return f
+	}
+
+	parts := strings.Split(f, ".")
+	yamlParts := make([]string, 0, len(parts))
+	for _, p := range parts {
+		for k := target.Kind(); k != reflect.Struct; k = target.Kind() {
+			switch k := target.Kind(); k {
+			case reflect.Ptr:
+				fallthrough
+			case reflect.Slice:
+				target = target.Elem()
+			default:
+				panic(fmt.Sprintf("unexpected kind: %s", k))
+			}
+		}
+
+		key := p
+		suffix := ""
+		if idx := strings.Index(p, "["); idx != -1 {
+			key = p[:idx]
+			suffix = p[idx:]
+		}
+		if sf, ok := target.FieldByName(key); !ok {
+			return f
+		} else {
+			target = sf.Type
+			if tag, ok := sf.Tag.Lookup("yaml"); ok {
+				yamlParts = append(yamlParts, fmt.Sprintf("%s%s", strings.SplitN(tag, ",", 2)[0], suffix))
+			} else {
+				yamlParts = append(yamlParts, p)
+			}
+  	}
+	}
+
+	return strings.Join(yamlParts, ".")
 }
 
 var translations []string = []string{
@@ -105,6 +142,7 @@ func registrationFunc(tag string, translation string, override bool) validator.R
 func decodeInternal(r io.Reader, fileName string, i interface{}) (t ut.Translator, sm sourceMapper, v *validator.Validate, err error) {
 	dec := yaml.NewDecoder(r)
 	dec.SetSourceMapReceiver(sm.AddSourceMap)
+	dec.SetStrict(true)
 	err = dec.Decode(i)
 	if err != nil {
 		return
@@ -119,14 +157,14 @@ func decodeInternal(r io.Reader, fileName string, i interface{}) (t ut.Translato
 	}
 	err = en.RegisterDefaultTranslations(tv, t)
 
+	iType := reflect.TypeOf(i)
 	tf := func(ut ut.Translator, fe validator.FieldError) string {
 		param := fe.Param()
 		if strings.HasSuffix(fe.Tag(), "field") {
-			param = sm.Translate(param, fileName)
+			param = sm.Translate(iType, param, fileName)
 		}
-		result, err := ut.T(fe.Tag(), sm.Translate(fe.StructNamespace(), fileName), param)
+		result, err := ut.T(fe.Tag(), sm.Translate(iType, fe.StructNamespace(), fileName), param)
 		if err != nil {
-			fmt.Printf("warning: error translating FieldError: %#v", fe)
 			return fe.(error).Error()
 		}
 
@@ -141,9 +179,9 @@ func decodeInternal(r io.Reader, fileName string, i interface{}) (t ut.Translato
 	return
 }
 
-func translateErrors(ve validator.ValidationErrors, v *validator.Validate, t ut.Translator, fileName string, sm sourceMapper) (te TranslatedErrors) {
+func translateErrors(ve validator.ValidationErrors, v *validator.Validate, t ut.Translator, fileName string, target reflect.Type, sm sourceMapper) (te TranslatedErrors) {
 	for _, x := range ve {
-		mfe := mappedFieldError{x, fileName, &sm}
+		mfe := mappedFieldError{x, fileName, &sm, target}
 		if translated, success := v.TranslateError(t, mfe); success {
 			te = append(te, translated)
 		} else {
@@ -182,7 +220,7 @@ func DecodeStruct(r io.Reader, fileName string, i interface{}) error {
 	err = v.Struct(i)
 	if err != nil {
 		if ve, ok := err.(validator.ValidationErrors); ok {
-			return translateErrors(ve, v, t, fileName, sm)
+			return translateErrors(ve, v, t, fileName, reflect.TypeOf(i), sm)
 		}
 	}
 
@@ -207,7 +245,7 @@ func DecodeVar(r io.Reader, fileName string, m interface{}, tag string) error {
 	err = v.Var(m, tag)
 	if err != nil {
 		if ve, ok := err.(validator.ValidationErrors); ok {
-			return translateErrors(ve, v, t, fileName, sm)
+			return translateErrors(ve, v, t, fileName, nil, sm)
 		}
 	}
 
